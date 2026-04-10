@@ -826,12 +826,13 @@ const ChatUI = (() => {
 // ═══════════════════════════════════════════════════════
 const VoiceRecorder = (() => {
   const sttStatus = document.getElementById('stt-status');
-  let recognition = null;
-  let mediaStream = null;
-  let audioCtx    = null;
-  let analyser    = null;
-  let isRecording = false;
-  let transcript  = '';
+  let recognition  = null;
+  let mediaStream  = null;
+  let audioCtx     = null;
+  let analyser     = null;
+  let isRecording  = false;
+  let transcript   = '';
+  let pendingCb    = null; // saved callback — fixes race condition with recognition.onend
 
   function isSupported() {
     return !!(window.SpeechRecognition || window.webkitSpeechRecognition);
@@ -841,6 +842,7 @@ const VoiceRecorder = (() => {
     if (isRecording) return;
     isRecording = true;
     transcript  = '';
+    pendingCb   = onResult; // save callback so onend can use it after isRecording is reset
 
     // Start mic for wave visualizer
     try {
@@ -859,14 +861,14 @@ const VoiceRecorder = (() => {
 
     if (!isSupported()) {
       sttStatus.textContent = '⚠️ Speech recognition not supported in this browser.';
-      setTimeout(() => stop(onResult), 5000);
+      setTimeout(() => stop(), 5000);
       return;
     }
 
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     recognition = new SR();
-    recognition.lang          = 'en-US';
-    recognition.continuous    = true;
+    recognition.lang           = 'en-US';
+    recognition.continuous     = true;
     recognition.interimResults = true;
 
     recognition.onresult = (e) => {
@@ -876,7 +878,10 @@ const VoiceRecorder = (() => {
         if (e.results[i].isFinal) { transcript += t; }
         else { interim = t; }
       }
-      sttStatus.textContent = '🎤 ' + (transcript + interim || '…');
+      // Show live interim in the text input so user sees what's being recognized
+      const current = (transcript + interim).trim();
+      sttStatus.textContent = current ? '🎤 ' + current : '🎤 Listening…';
+      if (pendingCb && pendingCb.onInterim) pendingCb.onInterim(current);
     };
 
     recognition.onerror = (e) => {
@@ -884,19 +889,25 @@ const VoiceRecorder = (() => {
       sttStatus.textContent = `⚠️ STT error: ${e.error}`;
     };
 
+    // onend fires AFTER recognition.stop() — by that time isRecording is already false,
+    // so we use pendingCb instead of checking isRecording
     recognition.onend = () => {
-      if (isRecording) { onResult(transcript.trim()); }
+      const final = transcript.trim();
+      sttStatus.textContent = '';
+      if (final && pendingCb) {
+        const cb = pendingCb;
+        pendingCb = null;
+        cb(final);
+      }
     };
 
     recognition.start();
     sttStatus.textContent = '🎤 Listening…';
   }
 
-  function stop(onResult) {
+  function stop() {
     if (!isRecording) return;
     isRecording = false;
-
-    if (recognition) { recognition.stop(); recognition = null; }
 
     WaveAnimation.stop();
 
@@ -905,12 +916,8 @@ const VoiceRecorder = (() => {
     if (audioCtx)    { audioCtx.close().catch(() => {}); audioCtx = null; }
     analyser = null;
 
-    sttStatus.textContent = '';
-
-    // If onResult was passed directly to stop (fallback)
-    if (onResult && typeof onResult === 'function' && transcript.trim()) {
-      onResult(transcript.trim());
-    }
+    // Stopping recognition will trigger recognition.onend, which delivers the transcript
+    if (recognition) { recognition.stop(); recognition = null; }
   }
 
   return { start, stop, isSupported };
@@ -985,14 +992,18 @@ const App = (() => {
   }
 
   // ── Say button (push-to-talk) ──
-  let recordingOnResult = null;
-
   function startRecording() {
     if (isBusy) return;
     sayBtn.classList.add('recording');
     sayBtn.textContent = '🔴 Release to Send';
     VoiceRecorder.start((transcript) => {
-      if (transcript) handleSend(transcript);
+      if (!transcript) return;
+      // Put the recognized text into the input field so the user can review it,
+      // then send automatically (mirrors the push-to-talk UX expectation)
+      textInput.value = transcript;
+      autoResizeTextarea();
+      textInput.focus();
+      handleSend(transcript);
     });
   }
 
