@@ -474,9 +474,23 @@
                placeholder="sk-..." autocomplete="off" />
       </div>
       <div class="info-box">
-        Your key is stored only in your browser's localStorage and is sent directly to OpenAI — never to any third-party server.
+        Your key is stored only in your browser's localStorage.
         Get your key at <a href="https://platform.openai.com/api-keys" target="_blank">platform.openai.com</a>.
         Used for both chat (gpt-4o-mini) and voice (tts-1).
+      </div>
+    </div>
+
+    <div class="settings-section">
+      <div class="settings-section-label">📱 Mobile / CORS Proxy</div>
+      <div class="field-group">
+        <div class="field-label">Proxy URL <span style="color:var(--hint);font-size:12px">(required for Telegram mobile)</span></div>
+        <input type="url" class="settings-input" id="proxy-url-input"
+               placeholder="https://your-worker.workers.dev" autocomplete="off" />
+      </div>
+      <div class="info-box">
+        Telegram mobile blocks direct requests to api.openai.com (CORS restriction in WebView).
+        Deploy the included <strong>proxy-worker.js</strong> to Cloudflare Workers (free) and paste its URL here.
+        Desktop Telegram works without a proxy — leave empty on desktop.
       </div>
     </div>
 
@@ -630,7 +644,13 @@ const OpenAIClient = (() => {
       { role: 'user', content: userText }
     ];
 
-    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+    // Use proxy URL if set (required for Telegram mobile WebView CORS)
+    const proxyBase = Storage.getSetting('proxy_url', '').replace(/\/$/, '');
+    const endpoint  = proxyBase
+      ? `${proxyBase}/v1/chat/completions`
+      : 'https://api.openai.com/v1/chat/completions';
+
+    const res = await fetch(endpoint, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -669,7 +689,12 @@ const OpenAITTS = (() => {
 
     stop();
 
-    const res = await fetch('https://api.openai.com/v1/audio/speech', {
+    const proxyBase = Storage.getSetting('proxy_url', '').replace(/\/$/, '');
+    const endpoint  = proxyBase
+      ? `${proxyBase}/v1/audio/speech`
+      : 'https://api.openai.com/v1/audio/speech';
+
+    const res = await fetch(endpoint, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -938,6 +963,7 @@ const App = (() => {
   const saveBtn      = document.getElementById('save-settings-btn');
   const clearBtn     = document.getElementById('clear-history-btn');
   const openaiInput  = document.getElementById('openai-key-input');
+  const proxyInput   = document.getElementById('proxy-url-input');
   const voiceSelect  = document.getElementById('voice-select');
   const toast        = document.getElementById('toast');
 
@@ -1049,16 +1075,19 @@ const App = (() => {
   // ── Load settings into form ──
   function loadSettingsForm() {
     openaiInput.value = Storage.getSetting('openai_key');
+    proxyInput.value  = Storage.getSetting('proxy_url');
     const savedVoice  = Storage.getSetting('voice', 'nova');
     voiceSelect.value = savedVoice;
   }
 
   // ── Save settings ──
   saveBtn.addEventListener('click', () => {
-    const oKey  = openaiInput.value.trim();
-    const voice = voiceSelect.value;
+    const oKey     = openaiInput.value.trim();
+    const proxyUrl = proxyInput.value.trim();
+    const voice    = voiceSelect.value;
 
     if (oKey) Storage.setSetting('openai_key', oKey);
+    Storage.setSetting('proxy_url', proxyUrl);
     Storage.setSetting('voice', voice);
 
     showToast('✅ Settings saved!');

@@ -1,29 +1,32 @@
 # English Tutor Telegram Mini App — План имплементации
 
 ## Описание задачи
-Создать Telegram Mini App (один файл `index.html`) — репетитора английского языка «Карен».
-Приложение работает полностью на стороне клиента: без бэкенда, ключи API вводятся пользователем через UI.
+Telegram Mini App (один файл `index.html`) — репетитор английского языка «Карен».
+Работает полностью на стороне клиента: без бэкенда, единственный API-ключ OpenAI вводится пользователем в UI.
+
+---
+
+## Файлы проекта
+
+| Файл | Описание |
+|------|----------|
+| `index.html` | Всё приложение: HTML + CSS + JS |
+| `proxy-worker.js` | Cloudflare Worker CORS-прокси (нужен для мобильного Telegram) |
+| `PLAN.md` | Этот файл |
 
 ---
 
 ## Стек технологий
-- **Фронтенд:** Vanilla HTML + CSS + JS (один файл `index.html`)
-- **LLM API:** OpenAI `gpt-4o-mini` (REST fetch из браузера)
-- **TTS API:** Google Cloud Text-to-Speech Standard Voices (REST fetch из браузера)
-- **STT:** Web Speech API (`SpeechRecognition`) — браузерный, бесплатный
-- **Хранилище:** `localStorage` (история 5 сообщений + ключи API + настройки голоса)
-- **Интеграция:** Telegram Web App JS SDK (`telegram-web-app.js`)
 
----
-
-## Архитектура файла `index.html`
-
-### Структура секций:
-1. `<head>` — мета-теги, Telegram SDK, встроенные CSS-стили
-2. `<body>` — два экрана (views), переключаемые через JS:
-   - **Экран чата** (`#chat-view`) — основной
-   - **Экран настроек** (`#settings-view`) — API-ключи и голос
-3. `<script>` — весь JavaScript в одном блоке
+| Слой | Технология |
+|------|-----------|
+| Фронтенд | Vanilla HTML + CSS + JS (один файл) |
+| LLM | OpenAI `gpt-4o-mini`, max_tokens: 300 |
+| TTS (озвучка) | OpenAI `tts-1` — тот же API-ключ |
+| STT (голосовой ввод) | Web Speech API `SpeechRecognition` — бесплатно, браузерный |
+| Хранилище | `localStorage` — история 5 диалогов + настройки |
+| Интеграция | Telegram Web App JS SDK |
+| CORS-прокси | Cloudflare Worker (бесплатно) — нужен для мобильного WebView |
 
 ---
 
@@ -31,26 +34,26 @@
 
 | Компонент | Описание |
 |-----------|----------|
-| Шапка | Имя бота "Karen 🎓", кнопка настроек ⚙️ |
+| Шапка | "Karen 👩‍🏫", кнопка настроек ⚙️ |
 | Область сообщений | Скроллируемый список сообщений (user / bot) |
-| Блок коррекции | Выделенный блок с коррекцией ошибки (если есть) |
-| Индикатор волны | SVG/Canvas анимация à la Siri (5 вертикальных полос) при записи |
-| Индикатор громкости | Реагирует на `AudioContext.getByteFrequencyData` |
+| Блок коррекции | Выделенный жёлтый блок `✏️ Correction` |
+| Волна-анимация | 7 полос Canvas + AudioContext analyser (Siri-стиль) |
 | Кнопка "Say" 🎤 | Push-to-talk: удержание = запись, отпустить = отправить |
 | Текстовое поле | Альтернативный ввод + кнопка отправки |
-| Кнопка воспроизведения 🔊 | На каждом сообщении бота — воспроизвести через TTS |
+| Кнопка 🔊 | На каждом сообщении бота — воспроизвести через TTS |
 
 ---
 
 ## Экран настроек — поля
 
-| Поле | Хранение |
-|------|----------|
-| OpenAI API Key | `localStorage['openai_key']` |
-| Google TTS API Key | `localStorage['google_tts_key']` |
-| Голос бота (select) | `localStorage['voice']` |
+| Поле | localStorage ключ | Описание |
+|------|-------------------|----------|
+| OpenAI API Key | `karen_openai_key` | Используется для чата и TTS |
+| Proxy URL | `karen_proxy_url` | URL Cloudflare Worker (для мобильного) |
+| Голос (select) | `karen_voice` | 6 голосов OpenAI TTS-1 + «Disabled» |
 
-Голоса для выбора: `en-US-Standard-C`, `en-US-Standard-E`, `uk-UA-Standard-B`, `ru-RU-Standard-C`, `ru-RU-Standard-A`
+### Голоса OpenAI TTS-1
+`nova` · `alloy` · `shimmer` · `echo` · `fable` · `onyx` · `disabled`
 
 ---
 
@@ -59,7 +62,8 @@
 ```
 Ты - профессиональный ИИ-репетитор английского языка. Твое имя Карен.
 Твоя цель: помочь пользователю достичь уровня Fluent через живое общение.
-Правила: дружелюбный стиль, коррекция ошибок в формате "Correction: [текст] — [пояснение на русском]",
+Правила: дружелюбный стиль, коррекция ошибок в формате
+"Correction: [текст] — [пояснение на русском]",
 ответ не более 3 предложений + один открытый вопрос в конце.
 ```
 
@@ -67,41 +71,44 @@
 
 ## JS-модули (внутри `<script>`)
 
-1. **Storage** — `getHistory()`, `saveMessage()`, `getSettings()`, `saveSettings()`
-2. **VoiceRecorder** — Web Speech API + `AudioContext` analyser для волны
-3. **WaveAnimation** — Canvas 5-полосная анимация Siri
-4. **OpenAIClient** — `sendMessage(text)` → gpt-4o-mini, max_tokens:300
-5. **GoogleTTS** — `speak(text, voice)` → base64 → AudioContext
-6. **ChatUI** — рендер bubbles, парсинг Correction-блока, автоскролл
-7. **SettingsScreen** — форма ввода ключей, select голоса
-8. **App** — Telegram SDK init, роутинг, проверка ключей при старте
+1. **Storage** — `getHistory()`, `saveMessage()`, `clearHistory()`, `getSetting()`, `setSetting()`
+2. **WaveAnimation** — 7-полосная Canvas анимация, управляется AudioContext analyser
+3. **OpenAIClient** — `sendMessage(text)` → `gpt-4o-mini`; поддерживает proxy URL
+4. **OpenAITTS** — `speak(text, voice)` → `tts-1`; поддерживает proxy URL
+5. **VoiceRecorder** — Web Speech API push-to-talk; `pendingCb` решает race condition с `onend`
+6. **ChatUI** — рендер bubbles, парсинг `Correction:`-блока, typing indicator, автоскролл
+7. **App** — Telegram SDK init, роутинг, сохранение настроек, проверка ключа при старте
 
 ---
 
-## Список задач
+## Исправленные баги
 
-- [x] html-skeleton — HTML структура
-- [x] css-styles — Telegram-тема, mobile design
-- [x] wave-animation — Siri-волна на Canvas
-- [x] storage-module — localStorage
-- [x] openai-module — gpt-4o-mini клиент
-- [x] google-tts-module — Google Cloud TTS
-- [x] voice-recorder — Web Speech API
-- [x] chat-ui — рендер сообщений
-- [x] settings-screen — экран настроек
-- [x] app-init — инициализация, роутинг
+| Баг | Причина | Решение |
+|-----|---------|---------|
+| Голосовой ввод не отправлялся | Race condition: `recognition.onend` проверял `isRecording`, который уже был `false` | Сохраняем колбэк в `pendingCb`, вызываем в `onend` |
+| Транскрипт не попадал в поле ввода | Колбэк вызывал `handleSend()` напрямую, минуя `textInput` | Теперь сначала пишем в `textInput.value`, потом отправляем |
+| `Failed to fetch` на мобильном Telegram | iOS/Android WebView блокирует CORS preflight с `Authorization` | Cloudflare Worker CORS-прокси (`proxy-worker.js`) |
 
 ---
 
 ## Деплой
-Разместить `index.html` на любом статик-хостинге:
-- GitHub Pages
-- Cloudflare Pages
-- Netlify Drop
 
-Затем зарегистрировать Mini App в @BotFather → Bot Settings → Menu Button → URL.
+### 1. Статика (index.html)
+```
+GitHub Pages / Cloudflare Pages / Netlify Drop
+```
+Затем: @BotFather → Bot Settings → Menu Button → URL страницы.
+
+### 2. CORS-прокси для мобильного (proxy-worker.js)
+1. [dash.cloudflare.com](https://dash.cloudflare.com) → Workers & Pages → Create
+2. Вставить содержимое `proxy-worker.js` → Deploy
+3. Скопировать URL воркера
+4. В приложении: Settings ⚙️ → Proxy URL → вставить → Save
+
+---
 
 ## Примечания
-- Браузерный `SpeechRecognition` работает в Chrome и Safari
-- Ключи в `localStorage` — приемлемо для личного использования
-- CORS для Google TTS и OpenAI работает напрямую из браузера
+- `SpeechRecognition` работает в Chrome и Safari (десктоп и мобильный)
+- API-ключ хранится только в `localStorage` браузера пользователя
+- На десктопном Telegram прокси не нужен — CORS работает напрямую
+- Прокси пересылает запросы только на `api.openai.com` — произвольные URL недоступны
