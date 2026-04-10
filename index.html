@@ -1,0 +1,1113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Karen — English Tutor</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <style>
+    /* ── Reset & Base ── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:         var(--tg-theme-bg-color, #1c1c1e);
+      --bg2:        var(--tg-theme-secondary-bg-color, #2c2c2e);
+      --text:       var(--tg-theme-text-color, #ffffff);
+      --hint:       var(--tg-theme-hint-color, #8e8e93);
+      --accent:     var(--tg-theme-button-color, #0a84ff);
+      --accent-txt: var(--tg-theme-button-text-color, #ffffff);
+      --link:       var(--tg-theme-link-color, #0a84ff);
+      --bubble-in:  var(--tg-theme-secondary-bg-color, #2c2c2e);
+      --bubble-out: var(--tg-theme-button-color, #0a84ff);
+      --radius:     18px;
+      --font:       -apple-system, 'Segoe UI', Roboto, sans-serif;
+    }
+
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font);
+      font-size: 16px;
+      overflow: hidden;
+    }
+
+    /* ── Screens ── */
+    .screen {
+      display: none;
+      flex-direction: column;
+      height: 100dvh;
+      height: 100vh; /* fallback */
+    }
+    .screen.active { display: flex; }
+
+    /* ── Header ── */
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 16px;
+      padding-top: calc(12px + env(safe-area-inset-top));
+      background: var(--bg2);
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+      flex-shrink: 0;
+      z-index: 10;
+    }
+    .header-title {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .avatar {
+      width: 36px; height: 36px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #0a84ff, #5e5ce6);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px;
+      flex-shrink: 0;
+    }
+    .header h1 { font-size: 17px; font-weight: 600; }
+    .header .subtitle { font-size: 12px; color: var(--hint); margin-top: 1px; }
+    .icon-btn {
+      background: none; border: none; color: var(--text);
+      font-size: 22px; cursor: pointer; padding: 6px;
+      border-radius: 50%; transition: background 0.15s;
+      line-height: 1;
+    }
+    .icon-btn:active { background: rgba(255,255,255,0.1); }
+
+    /* ── Messages ── */
+    #messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px 12px 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      scroll-behavior: smooth;
+    }
+    #messages::-webkit-scrollbar { width: 0; }
+
+    .msg-row {
+      display: flex;
+      flex-direction: column;
+      max-width: 82%;
+      animation: fadeUp 0.2s ease;
+    }
+    .msg-row.user { align-self: flex-end; align-items: flex-end; }
+    .msg-row.bot  { align-self: flex-start; align-items: flex-start; }
+
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(8px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .bubble {
+      padding: 9px 13px;
+      border-radius: var(--radius);
+      font-size: 15px;
+      line-height: 1.45;
+      word-break: break-word;
+      white-space: pre-wrap;
+    }
+    .msg-row.user .bubble {
+      background: var(--bubble-out);
+      color: var(--accent-txt);
+      border-bottom-right-radius: 5px;
+    }
+    .msg-row.bot .bubble {
+      background: var(--bubble-in);
+      color: var(--text);
+      border-bottom-left-radius: 5px;
+    }
+
+    /* Correction block */
+    .correction-block {
+      background: rgba(255, 214, 10, 0.12);
+      border-left: 3px solid #ffd60a;
+      border-radius: 8px;
+      padding: 8px 10px;
+      margin-bottom: 5px;
+      font-size: 13.5px;
+      line-height: 1.5;
+      color: var(--text);
+    }
+    .correction-label {
+      font-size: 11px;
+      font-weight: 700;
+      color: #ffd60a;
+      letter-spacing: 0.5px;
+      margin-bottom: 3px;
+      text-transform: uppercase;
+    }
+
+    /* TTS play button on bot messages */
+    .play-btn {
+      background: none; border: none;
+      color: var(--hint); font-size: 16px;
+      cursor: pointer; padding: 2px 4px;
+      margin-top: 3px; align-self: flex-start;
+      transition: color 0.15s;
+    }
+    .play-btn:hover { color: var(--accent); }
+
+    /* Typing indicator */
+    .typing-indicator {
+      display: flex; align-items: center; gap: 4px;
+      padding: 10px 14px;
+      background: var(--bubble-in);
+      border-radius: var(--radius);
+      border-bottom-left-radius: 5px;
+      width: fit-content;
+    }
+    .typing-dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: var(--hint);
+      animation: typingBounce 1.2s infinite;
+    }
+    .typing-dot:nth-child(2) { animation-delay: 0.2s; }
+    .typing-dot:nth-child(3) { animation-delay: 0.4s; }
+    @keyframes typingBounce {
+      0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
+      30% { transform: translateY(-5px); opacity: 1; }
+    }
+
+    /* ── Wave Visualizer ── */
+    #wave-container {
+      display: none;
+      justify-content: center;
+      align-items: center;
+      padding: 8px 0 4px;
+      gap: 5px;
+      flex-shrink: 0;
+    }
+    #wave-container.visible { display: flex; }
+    .wave-bar {
+      width: 4px;
+      border-radius: 2px;
+      background: var(--accent);
+      transition: height 0.05s ease;
+      min-height: 4px;
+    }
+
+    /* ── Input Area ── */
+    .input-area {
+      padding: 8px 12px;
+      padding-bottom: calc(8px + env(safe-area-inset-bottom));
+      background: var(--bg2);
+      border-top: 1px solid rgba(255,255,255,0.08);
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+    .input-row {
+      display: flex;
+      align-items: flex-end;
+      gap: 8px;
+    }
+    #text-input {
+      flex: 1;
+      background: var(--bg);
+      color: var(--text);
+      border: 1.5px solid rgba(255,255,255,0.1);
+      border-radius: 22px;
+      padding: 10px 16px;
+      font-size: 15px;
+      font-family: var(--font);
+      resize: none;
+      max-height: 100px;
+      min-height: 42px;
+      outline: none;
+      transition: border-color 0.2s;
+      line-height: 1.4;
+    }
+    #text-input:focus { border-color: var(--accent); }
+    #text-input::placeholder { color: var(--hint); }
+
+    .send-btn {
+      width: 42px; height: 42px; flex-shrink: 0;
+      border-radius: 50%;
+      background: var(--accent);
+      border: none; color: var(--accent-txt);
+      font-size: 18px; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: transform 0.1s, opacity 0.2s;
+    }
+    .send-btn:active { transform: scale(0.92); }
+    .send-btn:disabled { opacity: 0.4; cursor: default; }
+
+    /* Say button */
+    #say-btn {
+      width: 100%;
+      height: 52px;
+      border-radius: 26px;
+      background: var(--accent);
+      border: none;
+      color: var(--accent-txt);
+      font-size: 16px;
+      font-weight: 600;
+      font-family: var(--font);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: transform 0.1s, background 0.2s;
+      user-select: none;
+      -webkit-user-select: none;
+      touch-action: none;
+    }
+    #say-btn.recording {
+      background: #ff3b30;
+      animation: pulse 1s infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(255,59,48,0.4); }
+      50%  { box-shadow: 0 0 0 8px rgba(255,59,48,0); }
+    }
+    #say-btn:active { transform: scale(0.97); }
+
+    /* STT status */
+    #stt-status {
+      font-size: 12px;
+      color: var(--hint);
+      text-align: center;
+      min-height: 16px;
+    }
+
+    /* ── Settings Screen ── */
+    .settings-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 14px 16px;
+      padding-top: calc(14px + env(safe-area-inset-top));
+      background: var(--bg2);
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+      flex-shrink: 0;
+    }
+    .settings-header h2 { font-size: 17px; font-weight: 600; }
+
+    .settings-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 20px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+    .settings-section { display: flex; flex-direction: column; gap: 10px; }
+    .settings-section-label {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--hint);
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+    }
+    .field-group { display: flex; flex-direction: column; gap: 6px; }
+    .field-label { font-size: 14px; color: var(--hint); }
+
+    .settings-input, .settings-select {
+      width: 100%;
+      background: var(--bg2);
+      color: var(--text);
+      border: 1.5px solid rgba(255,255,255,0.1);
+      border-radius: 12px;
+      padding: 12px 14px;
+      font-size: 15px;
+      font-family: var(--font);
+      outline: none;
+      transition: border-color 0.2s;
+      appearance: none;
+      -webkit-appearance: none;
+    }
+    .settings-input:focus, .settings-select:focus { border-color: var(--accent); }
+
+    .settings-select-wrap {
+      position: relative;
+    }
+    .settings-select-wrap::after {
+      content: '▾';
+      position: absolute; right: 14px; top: 50%;
+      transform: translateY(-50%);
+      color: var(--hint);
+      pointer-events: none;
+    }
+
+    .save-btn {
+      width: 100%;
+      padding: 14px;
+      border-radius: 14px;
+      background: var(--accent);
+      color: var(--accent-txt);
+      border: none;
+      font-size: 16px;
+      font-weight: 600;
+      font-family: var(--font);
+      cursor: pointer;
+      transition: opacity 0.15s;
+    }
+    .save-btn:active { opacity: 0.8; }
+
+    .clear-btn {
+      width: 100%;
+      padding: 14px;
+      border-radius: 14px;
+      background: rgba(255,59,48,0.15);
+      color: #ff3b30;
+      border: 1.5px solid rgba(255,59,48,0.3);
+      font-size: 15px;
+      font-weight: 600;
+      font-family: var(--font);
+      cursor: pointer;
+    }
+    .clear-btn:active { opacity: 0.7; }
+
+    .info-box {
+      background: rgba(10,132,255,0.1);
+      border: 1px solid rgba(10,132,255,0.25);
+      border-radius: 12px;
+      padding: 12px 14px;
+      font-size: 13px;
+      color: var(--hint);
+      line-height: 1.5;
+    }
+    .info-box a { color: var(--link); text-decoration: none; }
+
+    /* Toast notification */
+    #toast {
+      position: fixed;
+      bottom: 90px;
+      left: 50%; transform: translateX(-50%);
+      background: rgba(0,0,0,0.8);
+      color: #fff;
+      padding: 9px 18px;
+      border-radius: 20px;
+      font-size: 14px;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.3s;
+      z-index: 1000;
+      white-space: nowrap;
+    }
+    #toast.show { opacity: 1; }
+
+    /* Welcome message */
+    .welcome-msg {
+      text-align: center;
+      padding: 24px 20px;
+      color: var(--hint);
+      font-size: 14px;
+      line-height: 1.6;
+    }
+    .welcome-msg .emoji { font-size: 40px; display: block; margin-bottom: 12px; }
+    .welcome-msg strong { color: var(--text); }
+  </style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════
+     CHAT SCREEN
+═══════════════════════════════ -->
+<div id="chat-view" class="screen active">
+
+  <div class="header">
+    <div class="header-title">
+      <div class="avatar">👩‍🏫</div>
+      <div>
+        <div class="header h1" style="font-size:17px;font-weight:600;">Karen</div>
+        <div class="subtitle">English Tutor · AI</div>
+      </div>
+    </div>
+    <button class="icon-btn" id="settings-btn" title="Settings">⚙️</button>
+  </div>
+
+  <div id="messages">
+    <div class="welcome-msg">
+      <span class="emoji">👩‍🏫</span>
+      <strong>Hi! I'm Karen, your English tutor.</strong><br>
+      Press <strong>Say</strong> to speak or type below.<br>
+      I'll correct your mistakes and help you improve!
+    </div>
+  </div>
+
+  <div id="wave-container">
+    <div class="wave-bar" id="bar0"></div>
+    <div class="wave-bar" id="bar1"></div>
+    <div class="wave-bar" id="bar2"></div>
+    <div class="wave-bar" id="bar3"></div>
+    <div class="wave-bar" id="bar4"></div>
+    <div class="wave-bar" id="bar5"></div>
+    <div class="wave-bar" id="bar6"></div>
+  </div>
+
+  <div class="input-area">
+    <div id="stt-status"></div>
+    <button id="say-btn">🎤 Say</button>
+    <div class="input-row">
+      <textarea id="text-input" rows="1" placeholder="Type a message…"></textarea>
+      <button class="send-btn" id="send-btn">↑</button>
+    </div>
+  </div>
+
+</div>
+
+<!-- ═══════════════════════════════
+     SETTINGS SCREEN
+═══════════════════════════════ -->
+<div id="settings-view" class="screen">
+
+  <div class="settings-header">
+    <button class="icon-btn" id="back-btn">←</button>
+    <h2>Settings</h2>
+  </div>
+
+  <div class="settings-body">
+
+    <div class="settings-section">
+      <div class="settings-section-label">API Keys</div>
+      <div class="field-group">
+        <div class="field-label">OpenAI API Key</div>
+        <input type="password" class="settings-input" id="openai-key-input"
+               placeholder="sk-..." autocomplete="off" />
+      </div>
+      <div class="field-group">
+        <div class="field-label">Google Cloud TTS API Key</div>
+        <input type="password" class="settings-input" id="google-key-input"
+               placeholder="AIza..." autocomplete="off" />
+      </div>
+      <div class="info-box">
+        Keys are stored only in your browser's localStorage — never sent to any server except the respective APIs.
+        Get OpenAI key at <a href="https://platform.openai.com/api-keys" target="_blank">platform.openai.com</a>,
+        Google key at <a href="https://console.cloud.google.com/apis/credentials" target="_blank">console.cloud.google.com</a>.
+      </div>
+    </div>
+
+    <div class="settings-section">
+      <div class="settings-section-label">Voice</div>
+      <div class="field-group">
+        <div class="field-label">Karen's Voice</div>
+        <div class="settings-select-wrap">
+          <select class="settings-select" id="voice-select">
+            <option value="en-US-Standard-C">🇺🇸 en-US-Standard-C (Female)</option>
+            <option value="en-US-Standard-E">🇺🇸 en-US-Standard-E (Female)</option>
+            <option value="uk-UA-Standard-B">🇺🇦 uk-UA-Standard-B (Male)</option>
+            <option value="ru-RU-Standard-A">🇷🇺 ru-RU-Standard-A (Female)</option>
+            <option value="ru-RU-Standard-C">🇷🇺 ru-RU-Standard-C (Male)</option>
+            <option value="disabled">🔇 Disabled (text only)</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <div class="settings-section">
+      <button class="save-btn" id="save-settings-btn">Save Settings</button>
+    </div>
+
+    <div class="settings-section">
+      <div class="settings-section-label">Chat</div>
+      <button class="clear-btn" id="clear-history-btn">🗑 Clear Chat History</button>
+    </div>
+
+  </div>
+</div>
+
+<!-- Toast -->
+<div id="toast"></div>
+
+<script>
+'use strict';
+
+// ═══════════════════════════════════════════════════════
+// STORAGE MODULE
+// ═══════════════════════════════════════════════════════
+const Storage = (() => {
+  const HISTORY_KEY = 'karen_history';
+  const MAX_PAIRS   = 5; // keep last 5 user+assistant pairs = 10 messages
+
+  function getHistory() {
+    try {
+      return JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]');
+    } catch { return []; }
+  }
+
+  function saveMessage(role, content) {
+    const history = getHistory();
+    history.push({ role, content });
+    // Keep only last MAX_PAIRS*2 messages (user+assistant pairs)
+    const trimmed = history.slice(-(MAX_PAIRS * 2));
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(trimmed));
+  }
+
+  function clearHistory() {
+    localStorage.removeItem(HISTORY_KEY);
+  }
+
+  function getSetting(key, defaultVal = '') {
+    return localStorage.getItem('karen_' + key) ?? defaultVal;
+  }
+
+  function setSetting(key, value) {
+    localStorage.setItem('karen_' + key, value);
+  }
+
+  return { getHistory, saveMessage, clearHistory, getSetting, setSetting };
+})();
+
+// ═══════════════════════════════════════════════════════
+// WAVE ANIMATION MODULE
+// ═══════════════════════════════════════════════════════
+const WaveAnimation = (() => {
+  const bars       = Array.from({ length: 7 }, (_, i) => document.getElementById('bar' + i));
+  const container  = document.getElementById('wave-container');
+  let analyser     = null;
+  let dataArray    = null;
+  let rafId        = null;
+  let idlePhase    = 0;
+
+  function setAnalyser(a) {
+    analyser  = a;
+    dataArray = new Uint8Array(a.frequencyBinCount);
+  }
+
+  function start() {
+    container.classList.add('visible');
+    animate();
+  }
+
+  function stop() {
+    container.classList.remove('visible');
+    if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
+    bars.forEach(b => b.style.height = '4px');
+  }
+
+  function animate() {
+    rafId = requestAnimationFrame(animate);
+
+    let heights;
+    if (analyser) {
+      analyser.getByteFrequencyData(dataArray);
+      // sample 7 evenly-spaced frequency buckets
+      const step = Math.floor(dataArray.length / 7);
+      heights = bars.map((_, i) => {
+        const val = dataArray[i * step] || 0;
+        return Math.max(4, (val / 255) * 44);
+      });
+    } else {
+      // idle sine-wave animation (no mic access yet)
+      idlePhase += 0.12;
+      heights = bars.map((_, i) => {
+        return 6 + Math.abs(Math.sin(idlePhase + i * 0.7)) * 30;
+      });
+    }
+
+    bars.forEach((b, i) => { b.style.height = heights[i] + 'px'; });
+  }
+
+  return { setAnalyser, start, stop };
+})();
+
+// ═══════════════════════════════════════════════════════
+// OPENAI CLIENT MODULE
+// ═══════════════════════════════════════════════════════
+const OpenAIClient = (() => {
+  const SYSTEM_PROMPT = `Ты - профессиональный ИИ-репетитор английского языка. Твое имя Карен. Твоя цель: помочь пользователю достичь уровня Fluent через живое общение.
+Твои правила:
+Стиль общения: Дружелюбный, подстраивайся под уровень сложности пользователя (чуть выше его текущего).
+Обязательная коррекция: Если пользователь допустил ошибку (грамматика, вокабуляр, пунктуация), ВСЕГДА начни свой ответ с блока 'Correction: [исправленный вариант] — [краткое пояснение правила на русском]'.
+Краткость — приоритет: Твой ответ (кроме блока коррекции) не должен превышать 3 предложений. Это критично для экономии токенов и удобства прослушивания голосом.
+Интерактивность: В конце каждой реплики задавай один открытый вопрос, чтобы продолжить диалог.
+Фокус на аудио: Пиши текст так, чтобы он хорошо звучал при озвучке (избегай сложных таблиц и длинных списков).
+Язык: Общайся на английском, но пояснения к ошибкам в блоке 'Correction' пиши на русском языке для лучшего понимания.
+Твоя личность: Ты эксперт-лингвист, который замечает детали, но не критикует, а поддерживает.`;
+
+  async function sendMessage(userText) {
+    const apiKey = Storage.getSetting('openai_key');
+    if (!apiKey) throw new Error('OpenAI API key is not set. Open Settings ⚙️ to add it.');
+
+    const history  = Storage.getHistory();
+    const messages = [
+      { role: 'system', content: SYSTEM_PROMPT },
+      ...history,
+      { role: 'user', content: userText }
+    ];
+
+    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        messages,
+        max_tokens: 300,
+        temperature: 0.7
+      })
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err?.error?.message || `OpenAI error ${res.status}`);
+    }
+
+    const data = await res.json();
+    return data.choices[0].message.content.trim();
+  }
+
+  return { sendMessage };
+})();
+
+// ═══════════════════════════════════════════════════════
+// GOOGLE TTS MODULE
+// ═══════════════════════════════════════════════════════
+const GoogleTTS = (() => {
+  // Voice code → language code mapping
+  const VOICE_LANG = {
+    'en-US-Standard-C': 'en-US',
+    'en-US-Standard-E': 'en-US',
+    'uk-UA-Standard-B': 'uk-UA',
+    'ru-RU-Standard-A': 'ru-RU',
+    'ru-RU-Standard-C': 'ru-RU',
+  };
+
+  let currentSource = null; // for stopping playback
+
+  async function speak(text, voiceName) {
+    if (!voiceName || voiceName === 'disabled') return;
+    const apiKey = Storage.getSetting('google_key');
+    if (!apiKey) { console.warn('Google TTS key not set — skipping audio.'); return; }
+
+    stop();
+
+    const languageCode = VOICE_LANG[voiceName] || 'en-US';
+
+    const res = await fetch(
+      `https://texttospeech.googleapis.com/v1/text:synthesize?key=${apiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          input: { text },
+          voice: { languageCode, name: voiceName },
+          audioConfig: { audioEncoding: 'MP3', speakingRate: 0.95 }
+        })
+      }
+    );
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      console.error('TTS error:', err?.error?.message || res.status);
+      return;
+    }
+
+    const data    = await res.json();
+    const binary  = atob(data.audioContent);
+    const bytes   = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+
+    const ctx    = new AudioContext();
+    const buffer = await ctx.decodeAudioData(bytes.buffer);
+    const source = ctx.createBufferSource();
+    source.buffer = buffer;
+    source.connect(ctx.destination);
+    source.start(0);
+    currentSource = source;
+  }
+
+  function stop() {
+    try { currentSource && currentSource.stop(); } catch (_) {}
+    currentSource = null;
+  }
+
+  return { speak, stop };
+})();
+
+// ═══════════════════════════════════════════════════════
+// CHAT UI MODULE
+// ═══════════════════════════════════════════════════════
+const ChatUI = (() => {
+  const messagesEl = document.getElementById('messages');
+  let typingEl     = null;
+
+  // Parse "Correction: ... — ..." prefix from bot reply
+  function parseCorrection(text) {
+    const match = text.match(/^Correction:\s*([\s\S]+?)(?:\n\n|\n(?=[A-Z])|$)([\s\S]*)$/);
+    if (match) {
+      return { correction: match[1].trim(), body: match[2].trim() };
+    }
+    // Alternative single-line correction
+    const lineMatch = text.match(/^(Correction:[^\n]+)\n([\s\S]*)$/);
+    if (lineMatch) {
+      return { correction: lineMatch[1].replace(/^Correction:\s*/, '').trim(), body: lineMatch[2].trim() };
+    }
+    return null;
+  }
+
+  function addMessage(role, text) {
+    const row = document.createElement('div');
+    row.className = `msg-row ${role}`;
+
+    if (role === 'bot') {
+      const parsed = parseCorrection(text);
+
+      if (parsed) {
+        // Correction block
+        const corrDiv = document.createElement('div');
+        corrDiv.className = 'correction-block';
+        const label = document.createElement('div');
+        label.className = 'correction-label';
+        label.textContent = '✏️ Correction';
+        corrDiv.appendChild(label);
+        const corrText = document.createElement('div');
+        corrText.textContent = parsed.correction;
+        corrDiv.appendChild(corrText);
+        row.appendChild(corrDiv);
+
+        // Main body bubble
+        if (parsed.body) {
+          const bubble = document.createElement('div');
+          bubble.className = 'bubble';
+          bubble.textContent = parsed.body;
+          row.appendChild(bubble);
+        }
+      } else {
+        const bubble = document.createElement('div');
+        bubble.className = 'bubble';
+        bubble.textContent = text;
+        row.appendChild(bubble);
+      }
+
+      // TTS play button
+      const playBtn = document.createElement('button');
+      playBtn.className = 'play-btn';
+      playBtn.title = 'Listen';
+      playBtn.textContent = '🔊';
+      playBtn.addEventListener('click', () => {
+        const voice = Storage.getSetting('voice', 'en-US-Standard-C');
+        // Speak only the non-correction part
+        const parsed2 = parseCorrection(text);
+        const spokenText = parsed2 ? parsed2.body || parsed2.correction : text;
+        GoogleTTS.speak(spokenText, voice);
+      });
+      row.appendChild(playBtn);
+
+    } else {
+      const bubble = document.createElement('div');
+      bubble.className = 'bubble';
+      bubble.textContent = text;
+      row.appendChild(bubble);
+    }
+
+    messagesEl.appendChild(row);
+    scrollToBottom();
+  }
+
+  function showTyping() {
+    hideTyping();
+    const row = document.createElement('div');
+    row.className = 'msg-row bot';
+    const ind = document.createElement('div');
+    ind.className = 'typing-indicator';
+    ind.innerHTML = '<div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div>';
+    row.appendChild(ind);
+    typingEl = row;
+    messagesEl.appendChild(row);
+    scrollToBottom();
+  }
+
+  function hideTyping() {
+    if (typingEl) { typingEl.remove(); typingEl = null; }
+  }
+
+  function scrollToBottom() {
+    requestAnimationFrame(() => {
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+    });
+  }
+
+  function clearMessages() {
+    messagesEl.innerHTML = `
+      <div class="welcome-msg">
+        <span class="emoji">👩‍🏫</span>
+        <strong>Chat cleared!</strong><br>Let's start fresh. Say something in English!
+      </div>`;
+  }
+
+  return { addMessage, showTyping, hideTyping, clearMessages };
+})();
+
+// ═══════════════════════════════════════════════════════
+// VOICE RECORDER MODULE
+// ═══════════════════════════════════════════════════════
+const VoiceRecorder = (() => {
+  const sttStatus = document.getElementById('stt-status');
+  let recognition = null;
+  let mediaStream = null;
+  let audioCtx    = null;
+  let analyser    = null;
+  let isRecording = false;
+  let transcript  = '';
+
+  function isSupported() {
+    return !!(window.SpeechRecognition || window.webkitSpeechRecognition);
+  }
+
+  async function start(onResult) {
+    if (isRecording) return;
+    isRecording = true;
+    transcript  = '';
+
+    // Start mic for wave visualizer
+    try {
+      mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      audioCtx    = new AudioContext();
+      analyser    = audioCtx.createAnalyser();
+      analyser.fftSize = 256;
+      const source = audioCtx.createMediaStreamSource(mediaStream);
+      source.connect(analyser);
+      WaveAnimation.setAnalyser(analyser);
+    } catch (e) {
+      console.warn('Mic access for visualizer failed:', e);
+    }
+
+    WaveAnimation.start();
+
+    if (!isSupported()) {
+      sttStatus.textContent = '⚠️ Speech recognition not supported in this browser.';
+      setTimeout(() => stop(onResult), 5000);
+      return;
+    }
+
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    recognition = new SR();
+    recognition.lang          = 'en-US';
+    recognition.continuous    = true;
+    recognition.interimResults = true;
+
+    recognition.onresult = (e) => {
+      let interim = '';
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const t = e.results[i][0].transcript;
+        if (e.results[i].isFinal) { transcript += t; }
+        else { interim = t; }
+      }
+      sttStatus.textContent = '🎤 ' + (transcript + interim || '…');
+    };
+
+    recognition.onerror = (e) => {
+      console.error('STT error:', e.error);
+      sttStatus.textContent = `⚠️ STT error: ${e.error}`;
+    };
+
+    recognition.onend = () => {
+      if (isRecording) { onResult(transcript.trim()); }
+    };
+
+    recognition.start();
+    sttStatus.textContent = '🎤 Listening…';
+  }
+
+  function stop(onResult) {
+    if (!isRecording) return;
+    isRecording = false;
+
+    if (recognition) { recognition.stop(); recognition = null; }
+
+    WaveAnimation.stop();
+
+    // Clean up audio
+    if (mediaStream) { mediaStream.getTracks().forEach(t => t.stop()); mediaStream = null; }
+    if (audioCtx)    { audioCtx.close().catch(() => {}); audioCtx = null; }
+    analyser = null;
+
+    sttStatus.textContent = '';
+
+    // If onResult was passed directly to stop (fallback)
+    if (onResult && typeof onResult === 'function' && transcript.trim()) {
+      onResult(transcript.trim());
+    }
+  }
+
+  return { start, stop, isSupported };
+})();
+
+// ═══════════════════════════════════════════════════════
+// APP — Main controller
+// ═══════════════════════════════════════════════════════
+const App = (() => {
+  // ── DOM refs ──
+  const chatView     = document.getElementById('chat-view');
+  const settingsView = document.getElementById('settings-view');
+  const sayBtn       = document.getElementById('say-btn');
+  const sendBtn      = document.getElementById('send-btn');
+  const textInput    = document.getElementById('text-input');
+  const settingsBtn  = document.getElementById('settings-btn');
+  const backBtn      = document.getElementById('back-btn');
+  const saveBtn      = document.getElementById('save-settings-btn');
+  const clearBtn     = document.getElementById('clear-history-btn');
+  const openaiInput  = document.getElementById('openai-key-input');
+  const googleInput  = document.getElementById('google-key-input');
+  const voiceSelect  = document.getElementById('voice-select');
+  const toast        = document.getElementById('toast');
+
+  let isBusy = false;
+
+  // ── Routing ──
+  function showScreen(id) {
+    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+    document.getElementById(id).classList.add('active');
+  }
+
+  // ── Toast ──
+  let toastTimeout;
+  function showToast(msg) {
+    toast.textContent = msg;
+    toast.classList.add('show');
+    clearTimeout(toastTimeout);
+    toastTimeout = setTimeout(() => toast.classList.remove('show'), 2500);
+  }
+
+  // ── Send a message through the full pipeline ──
+  async function handleSend(text) {
+    if (!text || isBusy) return;
+    isBusy = true;
+
+    ChatUI.addMessage('user', text);
+    Storage.saveMessage('user', text);
+    textInput.value = '';
+    autoResizeTextarea();
+
+    ChatUI.showTyping();
+
+    try {
+      const reply = await OpenAIClient.sendMessage(text);
+      ChatUI.hideTyping();
+      ChatUI.addMessage('bot', reply);
+      Storage.saveMessage('assistant', reply);
+
+      const voice = Storage.getSetting('voice', 'en-US-Standard-C');
+      if (voice !== 'disabled') {
+        // Speak only the non-correction part for better audio experience
+        const match = reply.match(/^Correction:[^\n]+\n([\s\S]*)$/);
+        const spoken = match ? match[1].trim() : reply;
+        GoogleTTS.speak(spoken, voice).catch(e => console.warn('TTS:', e));
+      }
+    } catch (err) {
+      ChatUI.hideTyping();
+      ChatUI.addMessage('bot', '⚠️ ' + err.message);
+    } finally {
+      isBusy = false;
+    }
+  }
+
+  // ── Say button (push-to-talk) ──
+  let recordingOnResult = null;
+
+  function startRecording() {
+    if (isBusy) return;
+    sayBtn.classList.add('recording');
+    sayBtn.textContent = '🔴 Release to Send';
+    VoiceRecorder.start((transcript) => {
+      if (transcript) handleSend(transcript);
+    });
+  }
+
+  function stopRecording() {
+    sayBtn.classList.remove('recording');
+    sayBtn.innerHTML = '🎤 Say';
+    VoiceRecorder.stop();
+  }
+
+  // Mouse events (desktop)
+  sayBtn.addEventListener('mousedown', (e) => { e.preventDefault(); startRecording(); });
+  sayBtn.addEventListener('mouseup',   () => stopRecording());
+  sayBtn.addEventListener('mouseleave',() => { if (sayBtn.classList.contains('recording')) stopRecording(); });
+
+  // Touch events (mobile)
+  sayBtn.addEventListener('touchstart', (e) => { e.preventDefault(); startRecording(); }, { passive: false });
+  sayBtn.addEventListener('touchend',   (e) => { e.preventDefault(); stopRecording(); }, { passive: false });
+
+  // ── Text input auto-resize ──
+  function autoResizeTextarea() {
+    textInput.style.height = 'auto';
+    textInput.style.height = Math.min(textInput.scrollHeight, 100) + 'px';
+  }
+  textInput.addEventListener('input', autoResizeTextarea);
+
+  textInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSend(textInput.value.trim());
+    }
+  });
+
+  sendBtn.addEventListener('click', () => handleSend(textInput.value.trim()));
+
+  // ── Settings navigation ──
+  settingsBtn.addEventListener('click', () => {
+    loadSettingsForm();
+    showScreen('settings-view');
+  });
+
+  backBtn.addEventListener('click', () => showScreen('chat-view'));
+
+  // ── Load settings into form ──
+  function loadSettingsForm() {
+    openaiInput.value = Storage.getSetting('openai_key');
+    googleInput.value = Storage.getSetting('google_key');
+    const savedVoice  = Storage.getSetting('voice', 'en-US-Standard-C');
+    voiceSelect.value = savedVoice;
+  }
+
+  // ── Save settings ──
+  saveBtn.addEventListener('click', () => {
+    const oKey = openaiInput.value.trim();
+    const gKey = googleInput.value.trim();
+    const voice = voiceSelect.value;
+
+    if (oKey)  Storage.setSetting('openai_key', oKey);
+    if (gKey)  Storage.setSetting('google_key', gKey);
+    Storage.setSetting('voice', voice);
+
+    showToast('✅ Settings saved!');
+    setTimeout(() => showScreen('chat-view'), 600);
+  });
+
+  // ── Clear history ──
+  clearBtn.addEventListener('click', () => {
+    if (confirm('Clear all chat history?')) {
+      Storage.clearHistory();
+      ChatUI.clearMessages();
+      showScreen('chat-view');
+      showToast('🗑 History cleared');
+    }
+  });
+
+  // ── Init ──
+  function init() {
+    // Telegram WebApp integration
+    if (window.Telegram?.WebApp) {
+      Telegram.WebApp.ready();
+      Telegram.WebApp.expand();
+    }
+
+    // If no API keys set, go to settings first
+    const hasOpenAI = Storage.getSetting('openai_key');
+    if (!hasOpenAI) {
+      loadSettingsForm();
+      showScreen('settings-view');
+      showToast('👆 Please add your API keys to start');
+    }
+  }
+
+  return { init };
+})();
+
+// ── Bootstrap ──
+document.addEventListener('DOMContentLoaded', () => App.init());
+</script>
+</body>
+</html>
